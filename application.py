@@ -16,8 +16,14 @@ def encode(obj):
 	return obj
 
 def insert_match(data):
+	ids = mongo.db.matches.find({},{'match_id':1}).sort('match_id',-1).limit(1)
+	if ids.count() > 0:
+		new_id = ids[0]['match_id'] + 1
+	else:
+		new_id = 1
+	data['match_id'] = new_id
 	matches = mongo.db.matches.insert_one(data)
-	return mongo.db.matches.find_one({'_id':matches.inserted_id})
+	return mongo.db.matches.find_one({'match_id':new_id})
 
 @app.route("/players/<id>", methods=['GET'])
 def get_player(id):
