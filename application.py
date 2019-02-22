@@ -15,6 +15,10 @@ def encode(obj):
 			obj[key] = str(value)
 	return obj
 
+def insert_match(data):
+	matches = mongo.db.matches.insert_one(data)
+	return mongo.db.matches.find_one({'_id':matches.inserted_id})
+
 @app.route("/players/<id>", methods=['GET'])
 def get_player(id):
 	players = mongo.db.player_statistics.find({'id':int(id)})
@@ -40,7 +44,22 @@ def get_team(id):
 @app.route("/teams", methods=['GET'])
 def get_all_teams():
 	teams = mongo.db.teams.find().sort('points',-1)
-	return jsonify({"response":[team for team in teams]})
+	return jsonify({"response":[encode(team) for team in teams]})
+
+@app.route("/matches", methods=['GET','POST'])
+def matches():
+	if request.method == "POST":
+		data = request.get_json()
+		return jsonify({"response":{"inserted_match":encode(insert_match(data))}})
+	elif request.method == "GET":
+		matches = mongo.db.matches.find()
+		return jsonify({"response":[encode(match) for match in matches]})
+	return ""
+
+@app.route("/matches/<id>", methods=['GET'])
+def get_match(id):
+	matches = mongo.db.matches.find({'id':int(id)})
+	return jsonify({"response":[encode(match) for match in matches]})
 
 if __name__ == '__main__':
     app.run(debug=True)
