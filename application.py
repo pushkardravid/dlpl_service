@@ -15,7 +15,17 @@ def encode(obj):
 			obj[key] = str(value)
 	return obj
 
+def get_team_players(id):
+	teams = mongo.db.teams.find({'team_id':int(id)})
+	return [team['players'] for team in teams][0]
+
 def insert_match(data):
+	scorecard_1 = {}
+	scorecard_2 = {}
+	scorecard_1['players'] = get_team_players(data['team_1']['team_id'])
+	scorecard_2['players'] = get_team_players(data['team_2']['team_id'])
+	data['scorecard_1'] = {'scorecard_id': insert_scorecard(scorecard_1)}
+	data['scorecard_2'] = {'scorecard_id': insert_scorecard(scorecard_2)}
 	ids = mongo.db.matches.find({},{'match_id':1}).sort('match_id',-1).limit(1)
 	if ids.count() > 0:
 		new_id = ids[0]['match_id'] + 1
@@ -25,9 +35,19 @@ def insert_match(data):
 	matches = mongo.db.matches.insert_one(data)
 	return mongo.db.matches.find_one({'match_id':new_id})
 
+def insert_scorecard(data):
+	ids = mongo.db.scorecards.find({},{'scorecard_id':1}).sort('scorecard_id',-1).limit(1)
+	if ids.count() > 0:
+		new_id = ids[0]['scorecard_id'] + 1
+	else:
+		new_id = 1
+	data['scorecard_id'] = new_id
+	scorecards = mongo.db.scorecards.insert_one(data)
+	return [scorecard['scorecard_id'] for scorecard in mongo.db.scorecards.find({'scorecard_id':new_id},{'scorecard_id':1})][0]
+
 @app.route("/players/<id>", methods=['GET'])
 def get_player(id):
-	players = mongo.db.player_statistics.find({'id':int(id)})
+	players = mongo.db.player_statistics.find({'player_id':int(id)})
 	return jsonify({"response":[encode(player) for player in players]})
 
 @app.route("/players", methods=['GET','POST'])
@@ -44,7 +64,7 @@ def get_all_players():
 
 @app.route("/teams/<id>", methods=['GET'])
 def get_team(id):
-	teams = mongo.db.teams.find({'id':int(id)})
+	teams = mongo.db.teams.find({'team_id':int(id)})
 	return jsonify({"response":[encode(team) for team in teams]})
 
 @app.route("/teams", methods=['GET'])
@@ -64,8 +84,14 @@ def matches():
 
 @app.route("/matches/<id>", methods=['GET'])
 def get_match(id):
-	matches = mongo.db.matches.find({'id':int(id)})
+	matches = mongo.db.matches.find({'match_id':int(id)})
 	return jsonify({"response":[encode(match) for match in matches]})
+
+
+@app.route("/scorecards/<id>", methods=['GET'])
+def get_scorecard(id):
+	scorecards = mongo.db.scorecard.find({'scorecard_id':int(id)})
+	return jsonify({"response":[encode(scorecard) for scorecard in scorecards]})
 
 if __name__ == '__main__':
     app.run(debug=True)
