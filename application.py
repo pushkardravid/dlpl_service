@@ -19,13 +19,23 @@ def get_team_players(id):
 	teams = mongo.db.teams.find({'team_id':int(id)})
 	return [team['players'] for team in teams][0]
 
+def add_player_attributes(player_list):
+	for player in player_list:
+		player['runs'] = 0
+		player['wickets'] = 0
+	return player_list
+
 def insert_match(data):
 	scorecard_1 = {}
 	scorecard_2 = {}
-	scorecard_1['players'] = get_team_players(data['team_1']['team_id'])
-	scorecard_2['players'] = get_team_players(data['team_2']['team_id'])
-	data['scorecard_1'] = {'scorecard_id': insert_scorecard(scorecard_1)}
-	data['scorecard_2'] = {'scorecard_id': insert_scorecard(scorecard_2)}
+	scorecard_1['players'] = add_player_attributes(get_team_players(data['team_1']['team_id']))
+	scorecard_2['players'] = add_player_attributes(get_team_players(data['team_2']['team_id']))
+	scorecard_1['team_id'] = data['team_1']['team_id']
+	scorecard_2['team_id'] = data['team_2']['team_id']
+	scorecard_1['innings'] = []
+	scorecard_2['innings'] = []
+	data['sc_' + str(data['team_1']['team_id'])] = scorecard_1
+	data['sc_' + str(data['team_2']['team_id'])] = scorecard_2
 	ids = mongo.db.matches.find({},{'match_id':1}).sort('match_id',-1).limit(1)
 	if ids.count() > 0:
 		new_id = ids[0]['match_id'] + 1
@@ -82,16 +92,53 @@ def matches():
 		return jsonify({"response":[encode(match) for match in matches]})
 	return ""
 
-@app.route("/matches/<id>", methods=['GET'])
+@app.route("/matches/<id>", methods=['GET','PUT'])
 def get_match(id):
-	matches = mongo.db.matches.find({'match_id':int(id)})
-	return jsonify({"response":[encode(match) for match in matches]})
+	if request.method == "GET":
+		matches = mongo.db.matches.find({'match_id':int(id)})
+		return jsonify({"response":[encode(match) for match in matches]})
+	elif request.method == "PUT":
+		data = request.get_json()
+		toss_winner = data['toss_winner_team_id']
+		first_innings_bat = data['first_team_id']
+		second_innings_bat = data['second_team_id']
+		mongo.db.matches.update_one({'match_id':int(id)},{
+			"$set":{
+			"toss_winner": toss_winner,
+			"first_innings": first_innings_bat,
+			"second_innings": second_innings_bat
+				}
+			})
+		return "toss result updated"
+	return ""
 
+@app.route("/scorecard/<id>", methods=['PUT'])
+def update_scorecard(id):
+	data = request.get_json()
+	ball = {}
+	ball['runs_scored'] = data['runs_scored']
+	ball['is_wicket'] = data['is_wicket']
+	ball['bowler'] = data['bowler_id']
+	ball['batsman'] = data['batsman_id']
+	ball['type'] = data['type']
+	mongo.db.matches.update({'match_id':int(id)},
+		{"$push":{
+				"sc_"+str(data["batsman_team_id"])+".innings": ball
+			}}
+		)
+	mongo.db.matches.update({'match_id':int(id), "sc_"+str(data["batsman_team_id"])+".players.player_id":data['batsman_id']},
+		{"$inc":{
+				"sc_"+str(data["batsman_team_id"])+".players.$.runs": data['runs_scored']
+			}}
+		)
 
-@app.route("/scorecards/<id>", methods=['GET'])
-def get_scorecard(id):
-	scorecards = mongo.db.scorecard.find({'scorecard_id':int(id)})
-	return jsonify({"response":[encode(scorecard) for scorecard in scorecards]})
+	if data['is_wicket'] == 'Y':
+		mongo.db.matches.update({'match_id':int(id), "sc_"+str(data["bowler_team_id"])+".players.player_id":data['bowler_id']},
+		{"$inc":{
+				"sc_"+str(data["bowler_team_id"])+".players.$.wickets": 1
+			}}
+		)
+	return "scorecard updated"
 
 if __name__ == '__main__':
     app.run(debug=True)
