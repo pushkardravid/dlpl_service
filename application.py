@@ -34,6 +34,8 @@ def insert_match(data):
 	scorecard_2['team_id'] = data['team_2']['team_id']
 	scorecard_1['innings'] = []
 	scorecard_2['innings'] = []
+	scorecard_1['extras'] = 0
+	scorecard_2['extras'] = 0
 	data['sc_' + str(data['team_1']['team_id'])] = scorecard_1
 	data['sc_' + str(data['team_2']['team_id'])] = scorecard_2
 	ids = mongo.db.matches.find({},{'match_id':1}).sort('match_id',-1).limit(1)
@@ -121,6 +123,14 @@ def update_scorecard(id):
 	ball['bowler'] = data['bowler_id']
 	ball['batsman'] = data['batsman_id']
 	ball['type'] = data['type']
+	if len(data["extras"]) > 0:
+		extras = sum([extra["runs"] for extra in data['extras']])
+		mongo.db.matches.update({'match_id':int(id)},
+		{"$inc":{
+				"sc_"+str(data["batsman_team_id"])+".extras": extras
+			}}
+		)
+
 	mongo.db.matches.update({'match_id':int(id)},
 		{"$push":{
 				"sc_"+str(data["batsman_team_id"])+".innings": ball
